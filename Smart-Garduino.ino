@@ -26,21 +26,30 @@ int air_temp[20];
 int air_humidity[20];
 int soil_moisture[20];
 int soil_moisture_wet[20];      // array of vwc (volumetric water content) data right after watering the garden
+int light_intensity[20];
+
 float increase_in_vwc;
+
+float average_humidity;
+float average_temp;
+float average_vwc;
+float average_light;
 
 
 #define soil_moisture_pin A0
 #define watervalve_pin 2         // control signal for water valve
 #define DHTPIN 3                 // Air Temperature and Humidity Sensor
 #define DHTTYPE DHT22
-#define VWC_THRESHOLD 20.0       // the moisture level that triggers the watering system (20% VWC)
+#define LIGHTPIN A1
 
+#define VWC_THRESHOLD 20.0       // the moisture level that triggers the watering system (20% VWC)
 #define AMOUNT_WATERED 200.0                   // Amount of water dispensed, assumed to be 200mL  
 
 DHT dht(DHTPIN, DHTTYPE);   
 
 void setup()
 {
+  
   pinMode(watervalve_pin, OUTPUT);
   digitalWrite(watervalve_pin, LOW);
   dht.begin();                    // initialize Temperature/Humidity Sensor
@@ -48,7 +57,7 @@ void setup()
   // initialize serial for debugging
   Serial.begin(230400);
   // initialize serial for ESP module
-  Serial1.begin(115200);
+  /*Serial1.begin(115200);
   // initialize ESP module
   WiFi.init(&Serial1);
 
@@ -67,7 +76,7 @@ void setup()
     status = WiFi.begin(ssid, pass);
   }
 
-  Serial.println("You're connected to the network");
+  Serial.println("You're connected to the network");*/
 }
 
 float mapfloat(long x, long in_min, long in_max, long out_min, long out_max)
@@ -114,9 +123,22 @@ void loop()
     
     delay(2000); // Delays 2 secods, as the DHT22 sampling rate is 0.5Hz
   }
+  
+  int sum = 0;
+  for(int i = 0; i < sizeof(air_humidity)/2; i++){
+    sum += air_humidity[i];
+  }
+  average_humidity = float(sum) / float(sizeof(air_humidity)/2);
+  Serial.println("Average Humidity: "+String(average_humidity));
+  sum = 0;
+  for(int i = 0; i < sizeof(air_temp)/2; i++){
+    sum += air_temp[i];
+  }
+  average_temp = float(sum) / float(sizeof(air_temp)/2);
+  Serial.println("Average Temperature: "+String(average_temp));
+  
 
   // Collect soil moisture data
-  int sum = 0;
   float reading;
   float vwc;
   
@@ -141,46 +163,73 @@ void loop()
     Serial.println("VWC: " + String(vwc));
 
     soil_moisture[i] = vwc;
-    sum += vwc;
     delay(700);
   }
+  sum = 0;
+  for (int i = 0; i < sizeof(soil_moisture)/2; i++){
+    sum += soil_moisture[i];
+  }
+  average_vwc = (float)sum/(float)(sizeof(soil_moisture)/2);
+  Serial.println("Average VWC: "+String(average_vwc));
   
-  float average_vwc = (float)sum/(float)(sizeof(soil_moisture)/2);
-  if (average_vwc <= VWC_THRESHOLD){          // Turn the Watering Valve ON for 19 seconds
-      digitalWrite(watervalve_pin, HIGH);
-      delay(19000);       
+  /*if (average_vwc <= VWC_THRESHOLD){          // Turn the Watering Valve ON for 19 seconds
+    digitalWrite(watervalve_pin, HIGH);
+    delay(19000);   
+    digitalWrite(watervalve_pin, LOW);    
 
-      // get vwc (volumetric water content) readings right after watering. Data could be useful in the future
-      sum = 0;
-      for (int i = 0; i < sizeof(soil_moisture_wet)/2; i++){
-        analogRead(soil_moisture_pin);
-        reading = mapfloat(reading, 0, 1023, 0, 3);
-        
-        if (reading <= 1.1){
-          vwc = 10*reading - 1.0;
-          if (vwc < 0)
-            vwc = 0;
-        }else if (reading <= 1.3){
-          vwc = 25*reading - 17.5;
-        }else if (reading <= 1.82){
-          vwc = 48.08*reading - 47.5;
-        }else if (reading <= 2.2){
-          vwc = 26.32*reading - 7.89;
-        }else{
-          vwc = 62.5*reading - 87.5;
-        }
-
-        Serial.println("Reading: " + String(reading));
-        Serial.println("VWC: " + String(vwc));
-    
-        soil_moisture_wet[i] = vwc;
-        sum += vwc;
-        delay(700);
+    // get vwc (volumetric water content) readings right after watering. Data could be useful in the future
+    for (int i = 0; i < sizeof(soil_moisture_wet)/2; i++){
+      analogRead(soil_moisture_pin);
+      reading = mapfloat(reading, 0, 1023, 0, 3);
+      
+      if (reading <= 1.1){
+        vwc = 10*reading - 1.0;
+        if (vwc < 0)
+          vwc = 0;
+      }else if (reading <= 1.3){
+        vwc = 25*reading - 17.5;
+      }else if (reading <= 1.82){
+        vwc = 48.08*reading - 47.5;
+      }else if (reading <= 2.2){
+        vwc = 26.32*reading - 7.89;
+      }else{
+        vwc = 62.5*reading - 87.5;
       }
-      Serial.println("Size of array: "+String((float)(sizeof(soil_moisture_wet)/2)));
-      increase_in_vwc = ((float)sum / (float)(sizeof(soil_moisture_wet)/2)) - average_vwc;
-      Serial.println("Increase in VWC: "+String(increase_in_vwc));
+
+      Serial.println("Reading: " + String(reading));
+      Serial.println("VWC: " + String(vwc));
+  
+      soil_moisture_wet[i] = vwc;
+      delay(700);
     }
+
+    sum = 0;
+    for (int i = 0; i < sizeof(soil_moisture_wet)/2; i++){
+      sum += soil_moisture_wet[i];
+    }
+    
+    Serial.println("Size of array: "+String((float)(sizeof(soil_moisture_wet)/2)));
+    increase_in_vwc = ((float)sum / (float)(sizeof(soil_moisture_wet)/2)) - average_vwc;
+    Serial.println("Increase in VWC: "+String(increase_in_vwc));
+  }*/
+  
+  // Collect Light Readings. 
+  // Currently, light is being represented in "Volts"
+  // Need to convert Volts to Lux/Candela later
+  /*for (int i = 0; i < sizeof(light_intensity)/2; ++i){
+    float reading = analogRead(LIGHTPIN);
+    reading = mapfloat(reading, 0, 1023, 0, 5);
+    Serial.println("Light intensity: "+String(reading));
+
+    light_intensity[i] = reading;
+    delay(700);
+  }
+  int sum = 0;
+  for (int i = 0; i < sizeof(light_intensity)/2; ++i){
+    sum += light_intensity[i];
+  }
+  average_light = (float)sum / (float)(sizeof(light_intensity)/2);
+  Serial.println("Average Light: "+average_light)*/
   
   // Collect data samples once every 20 minutes (20 min * 60 seconds/min * 1000 ms/second = 1200000 ms)
   delay(1200000);

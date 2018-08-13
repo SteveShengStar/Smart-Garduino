@@ -18,8 +18,8 @@
 SoftwareSerial Serial1(6, 7); // RX, TX
 #endif
 
-char ssid[] = "MMS";             // your network SSID (name) 
-char pass[] = "steven678";             // your network password (use for WPA, or use as key for WEP)
+char ssid[] = "";             // your network SSID (name) 
+char pass[] = "";             // your network password (use for WPA, or use as key for WEP)
 int status = WL_IDLE_STATUS;  // the Wifi radio's status
 
 int air_temp[20];

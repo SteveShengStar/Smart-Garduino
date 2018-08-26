@@ -7,15 +7,16 @@
 #include <TimeLib.h>
 
 #define soil_moisture_pin A0
+#define LIGHTCTRL 5
+#define lightpin A1
 #define watervalve_pin 2         // control signal for water valve
 #define DHTPIN 3                 // Air Temperature and Humidity Sensor
 #define DHTTYPE DHT22
-int lightpin = A3;
+
 
 
 #define VWC_THRESHOLD 20.0       // the moisture level that triggers the watering system (20% VWC)
-#define ARRAY_SIZE 5.0
-
+#define ARRAY_SIZE 10.0
 
 
 // Emulate Serial1 on pins 6/7 if not present
@@ -24,8 +25,8 @@ int lightpin = A3;
 SoftwareSerial Serial1(6, 7); // RX, TX
 #endif
 
-char ssid[] = "MMS";             // your network SSID (name) 
-char pass[] = "steven678";       // your network password (use for WPA, or use as key for WEP)
+char ssid[] = "";             // your network SSID (name) 
+char pass[] = "";       // your network password (use for WPA, or use as key for WEP)
 //int status = WL_IDLE_STATUS;     // the Wifi radio's status
 
 int air_temp[(int)ARRAY_SIZE];
@@ -53,7 +54,10 @@ String datetime;
 void setup()
 {
   pinMode(watervalve_pin, OUTPUT);
+  pinMode(LIGHTCTRL, OUTPUT);
   digitalWrite(watervalve_pin, LOW);
+  digitalWrite(LIGHTCTRL, LOW);
+  
   dht.begin();                    // initialize Temperature/Humidity Sensor
   
   // initialize serial for debugging
@@ -226,8 +230,68 @@ void loop()
       Serial.println("Average VWC after watering the garden: "+String(average_vwc_wet));
     }
     
+    // Collect Light Readings. 
+    // Currently, light is being represented as the photoresistor's resistance (lower resistance means brighter)
+    // We Need to convert Ohms to Lux/Candela later
+    float resistance;
+    if (daytime){
+      Serial.println("Daytime activated ************ ");
+      // Resistor being used for daytime mode is 200 Ohms
+      for (int i = 0; i < ARRAY_SIZE; ++i){
+        reading = analogRead(lightpin);
+        reading = mapfloat(reading, 0, 1023, 0, 5);
+  
+        resistance = (200.0*4.82)/reading - 200.0;
+        Serial.println("Daytime intensity: "+String(resistance));
+        light_intensity[i] = resistance;
+        delay(700);
+      }
+      sum_dbl = 0.0;
+      for (int i = 0; i < ARRAY_SIZE; ++i){
+        Serial.println(light_intensity[i]);
+        sum_dbl += light_intensity[i];
+      }
+      average_light = sum_dbl / ARRAY_SIZE;
+      Serial.println("Average Light: "+String(average_light));
+      
+      // For now, resistance of photoresistor represents brightness.
+      // Later, change brightness measure to Lux/Candela
+      if (average_light > 440.0){
+        daytime = false;
+        digitalWrite(LIGHTCTRL, HIGH);
+      }
+      
+    }else{
+      Serial.println("Nighttime activated ************ ");
+      // Resistor being used for nighttime mode is 995 Ohm
+      for (int i = 0; i < ARRAY_SIZE; ++i){
+        reading = analogRead(lightpin);
+        reading = mapfloat(reading, 0, 1023, 0, 5);
+  
+        resistance = (995.0*4.82)/reading - 995.0;
+        Serial.println("Nighttime intensity: "+String(resistance));
+        light_intensity[i] = resistance;
+        delay(700);
+      }
+      sum_dbl = 0.0;
+      for (int i = 0; i < ARRAY_SIZE; ++i){
+        Serial.println(light_intensity[i]);
+        sum_dbl += light_intensity[i];
+      }
+      average_light = sum_dbl / ARRAY_SIZE;
+      Serial.println("Average Light: "+String(average_light));
+      
+      if (average_light <= 400.0){
+        daytime = true;
+        digitalWrite(LIGHTCTRL, LOW);
+      }
+    }
+    
+    // Log data in a CSV file
+    myFile.print(String(average_humidity)+","+String(average_temp)+","+String(average_vwc)+","+String(average_vwc_wet)+","+String(average_light)+",");
+    
     // Add timestamp to data
-    /*if(String(month()).length() < 2){
+    if(String(month()).length() < 2){
       myFile.print("0"+String(month())+"-");
     }else{
       myFile.print(String(month())+"-");
@@ -249,90 +313,8 @@ void loop()
       myFile.print("0"+String(minute()));
     }else{
       myFile.print(String(minute()));
-    }*/
-    
-    // Collect Light Readings. 
-    // Currently, light is being represented as the photoresistor's resistance (lower resistance means brighter)
-    // We Need to convert Ohms to Lux/Candela later
-    /*for (int i = 0; i < sizeof(light_intensity)/2; ++i){
-      float reading = analogRead(lightpin);
-      reading = mapfloat(reading, 0, 1023, 0, 5);
-      Serial.println("Light intensity: "+String(reading));
-  
-      light_intensity[i] = reading;
-      delay(700);
-    }
-    int sum = 0;
-    for (int i = 0; i < sizeof(light_intensity)/2; ++i){
-      sum += light_intensity[i];
-    }
-    average_light = (float)sum / (float)(sizeof(light_intensity)/2);
-    Serial.println("Average Light: "+average_light)*/
-  
-    // Collect Light Readings. 
-    // Currently, light is being represented as the photoresistor's resistance (lower resistance means brighter)
-    // We Need to convert Ohms to Lux/Candela later
-    float resistance;
-    if (daytime){
-      Serial.println("Daytime activated ************ ");
-      // Resistor being used for daytime mode is 200 Ohms
-      for (int i = 0; i < ARRAY_SIZE; ++i){
-        reading = analogRead(lightpin);
-        reading = mapfloat(reading, 0, 1023, 0, 5);
-  
-        resistance = (200.0*4.7)/reading - 200.0;
-        Serial.println("Daytime intensity: "+String(resistance));
-        light_intensity[i] = resistance;
-        delay(700);
-      }
-      sum_dbl = 0.0;
-      for (int i = 0; i < ARRAY_SIZE; ++i){
-        Serial.println(light_intensity[i]);
-        sum_dbl += light_intensity[i];
-      }
-      average_light = sum_dbl / ARRAY_SIZE;
-      Serial.println("Average Light: "+String(average_light));
-      
-      // For now, resistance of photoresistor represents brightness.
-      // Later, change brightness measure to Lux/Candela
-      if (average_light > 440.0){
-        daytime = false;
-        lightpin = A1;
-      }
-      
-    }else{
-      Serial.println("Nighttime activated ************ ");
-      // Resistor being used for nighttime mode is 1000 Ohm
-      for (int i = 0; i < ARRAY_SIZE; ++i){
-        reading = analogRead(lightpin);
-        reading = mapfloat(reading, 0, 1023, 0, 5);
-  
-        resistance = (1000.0*4.7)/reading - 1000.0;
-        Serial.println("Nighttime intensity: "+String(resistance));
-        light_intensity[i] = resistance;
-        delay(700);
-      }
-      sum_dbl = 0.0;
-      for (int i = 0; i < ARRAY_SIZE; ++i){
-        Serial.println(light_intensity[i]);
-        sum_dbl += light_intensity[i];
-      }
-      average_light = sum_dbl / ARRAY_SIZE;
-      Serial.println("Average Light: "+String(average_light));
-      
-      if (average_light <= 400.0){
-        daytime = true;
-        lightpin = A3;
-      }
     }
     
-    // POST data to server
-    /*
-    client.println("POST /data/?air_temp="+String(average_temp)+"&air_humidity="+String(average_humidity)+"&soil_moisture="+String(average_vwc)+"&soil_moisture_wet="+String()+"&light_intensity="+String(average_light)+" HTTP/1.1");
-    client.println("Host:  http://ec2-18-191-185-66.us-east-2.compute.amazonaws.com:80");
-    */
-    // Log data in a CSV file
-    myFile.print(String(average_humidity)+","+String(average_temp)+","+String(average_vwc)+","+String(average_vwc_wet)+","+String(average_light)+",");
     myFile.println();
     myFile.flush();
   /*}
